@@ -1,5 +1,3 @@
-```python name=core_logic/writer_engine.py
-"""
 writer_engine.py
 
 LLM-powered SmartWriter using Groq Platform (Llama-3 via groq SDK).
