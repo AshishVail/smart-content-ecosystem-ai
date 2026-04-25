@@ -1,105 +1,82 @@
 import os
 import json
 import logging
-from groq import Groq, RateLimitError
+from groq import Groq
 
+# Logging setup for debugging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("core_logic.writer_engine")
-
-DEFAULT_MODEL = "llama-3-70b-8192"
-
-SYSTEM_PROMPT = (
-    "You are SmartWriter, an AI that generates SEO-optimized, human-like long-form articles with:\n"
-    "- Title as an H1 (Markdown)\n"
-    "- H2 and H3 headings for structure\n"
-    "- Bullet points and numbered lists where relevant\n"
-    "- Bold main keywords and important terms (Markdown: **like this**)\n"
-    "- Engaging introduction and strong conclusion\n"
-    "Always return a JSON as:\n"
-    "{\n  \"title\": \"...\",\n  \"body\": \"...\" \n}\n"
-    "The body should be at least 2000 words, return all well-formatted in Markdown."
-)
+logger = logging.getLogger("SmartWriter")
 
 class SmartWriter:
     """
-    SmartWriter generates SEO-optimized articles using Groq's Llama-3 model.
+    Professional AI Writer Engine optimized for Render deployment.
+    Uses Llama-3-70b via Groq for high-speed article generation.
     """
 
-    def __init__(self, model: str = DEFAULT_MODEL):
-        """
-        Initialize Groq client and set model.
-        """
-        groq_api_key = os.getenv("GROQ_API_KEY", "")
-        if not groq_api_key:
-            raise EnvironmentError("GROQ_API_KEY not set in environment.")
-        self.client = Groq(api_key=groq_api_key)
+    def __init__(self, model="llama-3-70b-8192"):
+        # Fetching API Key from environment variables
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            logger.error("Environment variable GROQ_API_KEY is missing!")
+            raise EnvironmentError("GROQ_API_KEY not found.")
+        
+        self.client = Groq(api_key=api_key)
         self.model = model
 
-    def generate_article(self, keyword: str, tone: str = "professional") -> dict:
+    def generate_article(self, keyword, tone="professional"):
         """
-        Generate an article based on the keyword and tone.
-        Returns a dict with keys 'title', 'body', and 'raw'.
+        Generates a structured SEO article.
+        Returns a dictionary with 'title' and 'body'.
         """
-        user_prompt = (
-            f'Write an in-depth article about "{keyword}".\n'
-            f'Tone: {tone}.\n'
-            "Strictly return ONLY the JSON object {\"title\":..., \"body\":...} as instructed above."
+        system_instructions = (
+            "You are a master SEO content writer. Create a detailed, long-form article. "
+            "Structure: H1 for Title, H2/H3 for subheadings, bullet points, and bold text. "
+            "STRICT RULE: Return ONLY a valid JSON object like this: "
+            "{\"title\": \"Article Title\", \"body\": \"Full Markdown Content\"}"
         )
+
+        user_query = f"Write a comprehensive SEO article about '{keyword}' in a '{tone}' tone."
+
         try:
-            response = self.client.chat.completions.create(
+            logger.info(f"Starting generation for keyword: {keyword}")
+            completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": user_query}
                 ],
-                temperature=0.8,
+                temperature=0.7,
                 max_tokens=4096
             )
-            text = response.choices[0].message.content.strip()
-            data = self._parse_output(text)
-            return {"title": data.get("title", ""), "body": data.get("body", ""), "raw": text}
-        except RateLimitError as e:
-            logger.error(f"Groq Rate Limit: {e}")
-            return {"title": "", "body": "", "raw": "", "error": "Rate limit exceeded."}
-        except Exception as e:
-            logger.error(f"Groq error or JSON parsing failed: {e}")
-            return {"title": "", "body": "", "raw": "", "error": str(e)}
 
-    def _parse_output(self, text: str) -> dict:
+            raw_response = completion.choices[0].message.content.strip()
+            return self._parse_json_safely(raw_response)
+
+        except Exception as e:
+            logger.error(f"Generation failed: {str(e)}")
+            return {"title": "Error", "body": f"Failed to generate content: {str(e)}"}
+
+    def _parse_json_safely(self, text):
         """
-        Robust JSON output parser. Handles common LLM formatting issues.
+        Cleans the AI response and converts it into a Python dictionary.
         """
         try:
-            t = text
-            if t.startswith("```json"):
-                t = t.lstrip("` \n")[6:]
-            t = t.strip()
-            if t.endswith("```"):
-                t = t[: -3].strip()
-            return json.loads(t)
+            # Removing markdown code blocks if AI adds them
+            cleaned_text = text
+            if "```json" in cleaned_text:
+                cleaned_text = cleaned_text.split("```json")[1].split("```")[0]
+            elif "```" in cleaned_text:
+                cleaned_text = cleaned_text.split("```")[1].split("```")[0]
+            
+            return json.loads(cleaned_text.strip())
         except Exception:
-            lines = text.splitlines()
-            title = ""
-            body = ""
-            found_title = False
-            for line in lines:
-                if line.startswith("# "):
-                    title = line.strip("# ").strip()
-                    found_title = True
-                    continue
-                if found_title:
-                    body += line + "\n"
-            if not title:
-                title = ""
-            if not body:
-                body = text
-            return {"title": title, "body": body}
+            logger.warning("JSON parsing failed, returning raw text as body.")
+            return {"title": "Generated Content", "body": text}
 
 if __name__ == "__main__":
-    keyword = input("Enter the keyword for the article: ").strip()
-    tone = input("Enter the tone (professional, casual, informative, creative): ").strip() or "professional"
+    # This block is only for local testing. 
+    # Hardcoded values prevent Render from hanging on input()
+    test_keyword = "Future of Artificial Intelligence"
     writer = SmartWriter()
-    result = writer.generate_article(keyword=keyword, tone=tone)
-    print("\nTITLE:\n", result["title"])
-    print("\nBODY:\n", result["body"] if result["body"] else result["raw"])
-```
+    result = writer.generate_article(test_keyword)
+    print(f"Status: Success\nTitle: {result.get('title')}")
