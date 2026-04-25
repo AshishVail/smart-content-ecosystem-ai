@@ -14,7 +14,7 @@ class SmartWriter:
     Designed for high-performance SEO article generation with robust parsing.
     """
 
-    def __init__(self, model="llama-3-70b-8192"):
+def __init__(self, model="llama-3.3-70b-versatile"):
         """
         Initializes the Groq client using environment variables.
         Ensures the system is secure and production-ready.
