@@ -1,82 +1,121 @@
 import os
 import json
 import logging
-from groq import Groq
+import re
+from groq import Groq, RateLimitError
 
-# Logging setup for debugging
+# Configure professional logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("SmartWriter")
+logger = logging.getLogger("WriterEngine")
 
 class SmartWriter:
     """
-    Professional AI Writer Engine optimized for Render deployment.
-    Uses Llama-3-70b via Groq for high-speed article generation.
+    Advanced Content Generation Engine using Groq's Large Language Models.
+    Designed for high-performance SEO article generation with robust parsing.
     """
 
     def __init__(self, model="llama-3-70b-8192"):
-        # Fetching API Key from environment variables
-        api_key = os.getenv("GROQ_API_KEY", "")
-        if not api_key:
-            logger.error("Environment variable GROQ_API_KEY is missing!")
-            raise EnvironmentError("GROQ_API_KEY not found.")
+        """
+        Initializes the Groq client using environment variables.
+        Ensures the system is secure and production-ready.
+        """
+        self.api_key = os.getenv("GROQ_API_KEY", "")
+        if not self.api_key:
+            logger.error("System Failure: GROQ_API_KEY is not defined.")
+            raise EnvironmentError("Critical Configuration Missing: GROQ_API_KEY.")
         
-        self.client = Groq(api_key=api_key)
+        self.client = Groq(api_key=self.api_key)
         self.model = model
+
+    def _generate_system_instructions(self):
+        """
+        Defines the structural and stylistic guidelines for the AI agent.
+        Ensures output strictly follows Markdown and JSON standards.
+        """
+        return (
+            "You are a professional SEO Content Architect. Your objective is to craft "
+            "high-quality, long-form, and authoritative articles that rank on search engines. "
+            "Technical Requirements:\n"
+            "1. Generate a compelling H1 title.\n"
+            "2. Utilize H2 and H3 subheadings for hierarchical structure.\n"
+            "3. Include a hook-driven introduction and a conclusive summary.\n"
+            "4. Use semantic formatting including bullet points and bold text for key concepts.\n"
+            "5. Ensure the word count targets 1500+ words for depth.\n"
+            "STRICT OUTPUT PROTOCOL: Return the response ONLY as a valid JSON object. "
+            "Structure: {\"title\": \"string\", \"body\": \"markdown_content\"}"
+        )
 
     def generate_article(self, keyword, tone="professional"):
         """
-        Generates a structured SEO article.
-        Returns a dictionary with 'title' and 'body'.
+        Executes the content generation workflow.
+        Handles API communication and processes the raw response.
         """
-        system_instructions = (
-            "You are a master SEO content writer. Create a detailed, long-form article. "
-            "Structure: H1 for Title, H2/H3 for subheadings, bullet points, and bold text. "
-            "STRICT RULE: Return ONLY a valid JSON object like this: "
-            "{\"title\": \"Article Title\", \"body\": \"Full Markdown Content\"}"
+        logger.info(f"Initiating generation sequence for keyword: {keyword}")
+        
+        system_prompt = self._generate_system_instructions()
+        user_prompt = (
+            f"Compose an exhaustive, SEO-optimized article regarding: '{keyword}'. "
+            f"Required Tone: {tone}. Content must be ready for professional publishing."
         )
 
-        user_query = f"Write a comprehensive SEO article about '{keyword}' in a '{tone}' tone."
-
         try:
-            logger.info(f"Starting generation for keyword: {keyword}")
+            # API Request Orchestration
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_instructions},
-                    {"role": "user", "content": user_query}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.7,
-                max_tokens=4096
+                max_tokens=4096,
+                top_p=1,
+                stream=False
             )
 
-            raw_response = completion.choices[0].message.content.strip()
-            return self._parse_json_safely(raw_response)
+            response_payload = completion.choices[0].message.content.strip()
+            
+            # Extracting and validating the JSON payload
+            return self._process_and_validate_payload(response_payload)
 
+        except RateLimitError:
+            logger.error("API Gateway: Rate limit threshold exceeded.")
+            return {
+                "title": "Service Temporarily Unavailable",
+                "body": "The system has reached its maximum capacity. Please wait before retrying."
+            }
         except Exception as e:
-            logger.error(f"Generation failed: {str(e)}")
-            return {"title": "Error", "body": f"Failed to generate content: {str(e)}"}
+            logger.error(f"Core Engine Exception: {str(e)}")
+            return {
+                "title": "System Error",
+                "body": f"The generation process encountered an error: {str(e)}"
+            }
 
-    def _parse_json_safely(self, text):
+    def _process_and_validate_payload(self, raw_content):
         """
-        Cleans the AI response and converts it into a Python dictionary.
+        Sanitizes the raw AI output and converts it into a structured dictionary.
+        Implements fallback mechanisms for non-standard JSON responses.
         """
         try:
-            # Removing markdown code blocks if AI adds them
-            cleaned_text = text
-            if "```json" in cleaned_text:
-                cleaned_text = cleaned_text.split("```json")[1].split("```")[0]
-            elif "```" in cleaned_text:
-                cleaned_text = cleaned_text.split("```")[1].split("```")[0]
+            # Attempt to extract JSON if encapsulated in Markdown blocks
+            if "```json" in raw_content:
+                match = re.search(r'```json\s*(.*?)\s*```', raw_content, re.DOTALL)
+                if match:
+                    return json.loads(match.group(1))
             
-            return json.loads(cleaned_text.strip())
-        except Exception:
-            logger.warning("JSON parsing failed, returning raw text as body.")
-            return {"title": "Generated Content", "body": text}
+            # Direct JSON deserialization
+            return json.loads(raw_content)
+        
+        except (json.JSONDecodeError, Exception):
+            logger.warning("Standard parsing failed. Implementing structural recovery.")
+            
+            # Heuristic recovery: split title and content manually
+            content_lines = raw_content.split('\n')
+            title = content_lines[0].replace("#", "").strip()
+            body = "\n".join(content_lines[1:])
+            
+            return {
+                "title": title if title else "Generated Article",
+                "body": body if body else raw_content
+            }
 
-if __name__ == "__main__":
-    # This block is only for local testing. 
-    # Hardcoded values prevent Render from hanging on input()
-    test_keyword = "Future of Artificial Intelligence"
-    writer = SmartWriter()
-    result = writer.generate_article(test_keyword)
-    print(f"Status: Success\nTitle: {result.get('title')}")
+# End of Logic. No test scripts included to prevent deployment conflicts on Render.
