@@ -16,7 +16,7 @@ Dependencies:
 Usage:
     from utils.config import Config
     config = Config()
-    print(config.OPENAI_API_KEY)
+    print(config.GROQ_API_KEY)
 """
 
 import os
