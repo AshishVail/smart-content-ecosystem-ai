@@ -95,7 +95,7 @@ Follow ALL these rules for EVERY response:
 If unsure, write extra detail rather than less.
 """
 
-USER_PROMPT_TEMPLATE = """
+USER_PROMPT_TEMPLATE =
 Write an SEO-optimized, in-depth article about "{keyword}".
 Adjust your language style for this tone: "{tone}".
 """
