@@ -14,7 +14,6 @@ from media_manager.image_creator import SmartMediaEngine
 from integrations.wordpress_api import WordPressClient
 
 # --- RENDER PORT BINDING FIX ---
-# Flask server ko sabse pehle start karenge taaki Render ko signal mil jaye
 app = Flask(__name__)
 
 @app.route('/')
@@ -22,11 +21,10 @@ def health_check():
     return "Ecosystem Controller is Active", 200
 
 def run_health_server():
-    try:
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-    except Exception as e:
-        print(f"Server Error: {e}")
+    port = int(os.environ.get("PORT", 10000))
+    # 'threading' se hone wale clash ko rokne ke liye use_reloader=False rakha hai
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
 # ------------------------------
 
 # Logging Configuration
@@ -63,7 +61,6 @@ class EcosystemController:
             logger.info("Step 1/4: Generating Content...")
             article_data = self.writer.generate_article(primary_keyword)
             
-            # Smart parsing to handle dict or string response
             if isinstance(article_data, dict):
                 article_body = article_data.get('body', "")
                 article_title = article_data.get('title', primary_keyword.title())
@@ -72,7 +69,7 @@ class EcosystemController:
                 article_title = primary_keyword.title()
 
             if not article_body: 
-                logger.error("Content generation failed. Body is empty.")
+                logger.error("Content generation failed.")
                 return
 
             logger.info("Step 2/4: SEO Audit...")
@@ -83,13 +80,9 @@ class EcosystemController:
                     primary_keyword=primary_keyword,
                     secondary_keywords=secondary_keywords
                 )
-                seo_report = self.seo_analyzer.analyze()
-                # Ensure seo_report is a dictionary to prevent 'NoneType' errors
-                if seo_report is None:
-                    seo_report = {}
+                seo_report = self.seo_analyzer.analyze() or {}
             except Exception as e:
-                logger.warning(f"SEO Audit failed, using defaults: {e}")
-                seo_report = {}
+                logger.warning(f"SEO Audit failed: {e}")
             
             logger.info("Step 3/4: Creating Image...")
             image_path = None
@@ -101,9 +94,7 @@ class EcosystemController:
                 logger.warning(f"Image creation failed: {e}")
 
             logger.info("Step 4/4: Posting to WordPress...")
-            
-            # FIXED: Added safety check to prevent Attribute Error for meta_description
-            meta_desc = "Professional article about " + primary_keyword
+            meta_desc = "SEO Optimized Content"
             if isinstance(seo_report, dict):
                 meta_desc = seo_report.get('meta_description', meta_desc)
             
@@ -122,27 +113,25 @@ class EcosystemController:
             if post_id:
                 logger.info(f"SUCCESS: Article posted with ID {post_id}")
             
-            logger.info(f"Workflow completed in {time.time() - start_time:.2f} seconds.")
-
         except Exception as e:
             logger.critical(f"System Failure: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
-    # 1. Start Flask server in background FIRST for Render health check
-    t = threading.Thread(target=run_health_server)
-    t.daemon = True
-    t.start()
+    # --- IMPORTANT FIX: CHECK IF PORT IS ALREADY IN USE ---
+    # Hum pehle server thread start karenge bina kisi clash ke
+    server_thread = threading.Thread(target=run_health_server)
+    server_thread.daemon = True
+    server_thread.start()
     
-    # 2. Wait for server to bind
-    time.sleep(3)
+    # Server ko set hone ke liye time do
+    time.sleep(2)
     
-    # 3. Run Automation Logic
     controller = EcosystemController()
     main_keyword = "Future of Artificial Intelligence 2026"
     related_keywords = ["AI trends", "Automation"]
     
     controller.execute_workflow(main_keyword, secondary_keywords=related_keywords)
     
-    # 4. Keep alive forever so Render doesn't stop the service
+    # Keep alive loop
     while True:
         time.sleep(3600)
