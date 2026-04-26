@@ -4,113 +4,116 @@ import logging
 import re
 from groq import Groq, RateLimitError
 
-# Configure professional logging
+# प्रोफेशनल लॉगिंग सेटअप
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("WriterEngine")
 
 class SmartWriter:
     """
-    High-Performance SEO Content Architect.
-    Forces structural compliance (H1, H2, H3, Bullets) and high keyword density.
+    Advanced SEO Content Engine.
+    यह इंजन विशेष रूप से H1, H2, H3 और Bullet Points को सुरक्षित रखने के लिए बनाया गया है।
     """
 
     def __init__(self, model="llama-3.3-70b-versatile"):
-        """
-        Initializes the Groq client and handles configuration.
-        """
         self.api_key = os.getenv("GROQ_API_KEY", "")
         if not self.api_key:
-            logger.error("System Failure: GROQ_API_KEY is not defined.")
-            raise EnvironmentError("Critical Configuration Missing: GROQ_API_KEY.")
+            logger.error("GROQ_API_KEY Missing.")
+            raise EnvironmentError("Configuration Error: GROQ_API_KEY is not set.")
         
         self.client = Groq(api_key=self.api_key)
         self.model = model
 
-    def _generate_system_instructions(self, keyword):
+    def _generate_strict_prompt(self, keyword):
         """
-        Provides the AI with strict SEO and structural guidelines.
+        AI को कड़े निर्देश देने के लिए प्रोम्पट।
         """
-        return (
-            "You are a Senior SEO Content Specialist. Your goal is to write a viral, "
-            "authoritative, and highly structured article. "
-            f"FOCUS KEYWORD: '{keyword}'\n\n"
-            "STRICT STRUCTURAL RULES:\n"
-            "1. H1 TITLE: Create a magnetic, SEO-optimized title containing the keyword.\n"
-            "2. H2 & H3 HEADINGS: Organize the content with at least 4-5 H2 headings and relevant H3 sub-headings.\n"
-            "3. FORMATTING: Use bold text for importance, bullet points for lists, and numbered lists where appropriate.\n"
-            "4. KEYWORD DENSITY: Naturally integrate the focus keyword throughout the introduction, headings, and conclusion.\n"
-            "5. LENGTH: Target a minimum of 1500 words for deep coverage.\n"
-            "6. TABLE: If relevant, include a summary table of key points.\n"
-            "7. CONCLUSION: End with a powerful summary and a FAQ section.\n\n"
-            "OUTPUT PROTOCOL:\n"
-            "Respond ONLY with a valid JSON object. DO NOT include any text outside the JSON.\n"
-            "Structure: {\"title\": \"H1 Title Here\", \"body\": \"Full Markdown Article Here\"}"
-        )
+        return f"""
+        Act as a Senior SEO Content Strategist. Your goal is to write a high-ranking article.
+        
+        KEYWORD: {keyword}
+        
+        CONTENT STRUCTURE RULES:
+        1. H1 TITLE: Start with a catchy H1 title including the keyword.
+        2. HEADINGS: Use at least 5-6 '##' (H2) and relevant '###' (H3) for sub-points.
+        3. LISTS: Use '-' for bullet points and '1.' for steps. No exceptions.
+        4. BOLDING: Bold all critical terms and keywords using **text**.
+        5. TABLES: Create a Markdown table for key takeaways or data summary.
+        6. LENGTH: The article must exceed 1500 words.
+        
+        OUTPUT FORMAT:
+        You MUST respond ONLY with a JSON object in this format:
+        {{
+            "title": "Your H1 Title Here",
+            "body": "Your full markdown content starting from Introduction..."
+        }}
+        """
 
     def generate_article(self, keyword, tone="professional"):
-        """
-        Executes the content generation workflow with SEO parameters.
-        """
-        logger.info(f"SEO Generation started for: {keyword}")
+        logger.info(f"SEO Article Sequence Initiated: {keyword}")
         
-        system_prompt = self._generate_system_instructions(keyword)
-        user_prompt = (
-            f"Keyword: '{keyword}'. Tone: {tone}. Write a long-form, high-authority "
-            "article that follows all provided structural and SEO guidelines."
-        )
+        system_instructions = self._generate_strict_prompt(keyword)
+        user_input = f"Topic: {keyword}. Tone: {tone}. Create a complete SEO optimized masterpiece."
 
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": user_input}
                 ],
-                temperature=0.6, # Lower temperature for more structured/factual writing
-                max_tokens=8192, # Allowing room for long articles
-                top_p=1
+                temperature=0.5, # स्ट्रक्चर बनाए रखने के लिए कम टेम्परेचर
+                max_tokens=8192,
+                top_p=1,
+                stream=False
             )
 
-            response_payload = completion.choices[0].message.content.strip()
-            return self._process_and_validate_payload(response_payload)
+            raw_text = completion.choices[0].message.content.strip()
+            return self._parse_and_clean_content(raw_text)
 
-        except RateLimitError:
-            logger.error("Rate limit hit.")
-            return {"title": "Rate Limit Exceeded", "body": "Please wait a moment."}
         except Exception as e:
-            logger.error(f"Engine Error: {str(e)}")
-            return {"title": "Error", "body": f"The process failed: {str(e)}"}
+            logger.error(f"Engine Failure: {str(e)}")
+            return {"title": "Error", "body": f"Technical Issue: {str(e)}"}
 
-    def _process_and_validate_payload(self, raw_content):
+    def _parse_and_clean_content(self, raw_text):
         """
-        Processes and sanitizes the AI output to ensure perfect JSON parsing.
+        यह फंक्शन AI के गंदे JSON को साफ़ करके उसे सुंदर Markdown में बदलता है।
         """
         try:
-            # Clean possible markdown wrap
-            clean_content = raw_content
-            if "```json" in raw_content:
-                match = re.search(r'```json\s*(.*?)\s*```', raw_content, re.DOTALL)
-                if match:
-                    clean_content = match.group(1)
+            # Markdown Code Blocks हटाना
+            if "```json" in raw_text:
+                raw_text = re.search(r'```json\s*(.*?)\s*```', raw_text, re.DOTALL).group(1)
             
-            # Initial Parse
-            data = json.loads(clean_content)
+            # JSON लोड करना
+            data = json.loads(raw_text)
+            
+            # 'body' को साफ़ करना (Escaped characters को असली New Lines में बदलना)
+            body_content = data.get('body', "")
+            
+            # अगर AI ने JSON के अंदर JSON डाल दिया है, तो उसे ठीक करें
+            if body_content.startswith('{"title":'):
+                nested = json.loads(body_content)
+                body_content = nested.get('body', body_content)
 
-            # Fix for nested JSON strings in title or body
-            if isinstance(data.get('title'), str) and '{"title":' in data.get('title'):
-                data = json.loads(data['title'])
-
-            # Final check to ensure we have title and body
             return {
-                "title": data.get('title', "Untitled SEO Article"),
-                "body": data.get('body', clean_content)
+                "title": data.get('title', "Professional SEO Article"),
+                "body": body_content
             }
-        
-        except Exception as e:
-            logger.warning(f"JSON Recovery triggered: {e}")
-            # Manual fallback
-            content_lines = raw_content.split('\n')
-            title = content_lines[0].replace("#", "").strip()
-            return {"title": title, "body": raw_content}
 
-# End of SEO Logic.
+        except Exception as e:
+            logger.warning(f"Standard JSON parse failed, using regex recovery. Error: {e}")
+            # Regex के ज़रिए टाइटल और बॉडी निकालना अगर JSON टूट गया है
+            try:
+                title_match = re.search(r'"title":\s*"(.*?)"', raw_text)
+                body_match = re.search(r'"body":\s*"(.*)"', raw_text, re.DOTALL)
+                
+                title = title_match.group(1) if title_match else "SEO Optimized Content"
+                body = body_match.group(1) if body_match else raw_text
+                
+                # \n को असली न्यू लाइन में बदलना
+                body = body.replace("\\n", "\n").replace('\\"', '"')
+                
+                return {"title": title, "body": body}
+            except:
+                return {"title": "Article Generated", "body": raw_text}
+
+# Logic Complete.
