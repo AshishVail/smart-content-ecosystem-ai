@@ -5,22 +5,20 @@ import time
 import threading
 from flask import Flask
 
-# Path configuration for Render
+# Path fix: Python ko batao ki saari files isi folder mein hain
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-try:
-    from utils import config
-    from core_logic.writer_engine import SmartWriter
-    from integrations.wordpress_api import WordPressClient
-except ImportError as e:
-    print(f"Import Error: {e}")
+# Direct Imports (No try-except, taaki error saaf dikhe)
+from utils import config
+from core_logic.writer_engine import SmartWriter
+from integrations.wordpress_api import WordPressClient
 
-# --- RENDER PORT BINDING ---
+# --- RENDER SERVER ---
 app = Flask(__name__)
 
 @app.route('/')
 def health_check():
-    return "Nexovent Bot is Running", 200
+    return "Nexovent Bot: Online", 200
 
 def run_health_server():
     port = int(os.environ.get("PORT", 10000))
@@ -31,9 +29,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s]: %(m
 logger = logging.getLogger("NexoventBot")
 
 def run_bot():
-    logger.info("Stabilizing server...")
-    time.sleep(20) 
+    logger.info("Bot starting in 15 seconds...")
+    time.sleep(15) 
     try:
+        # Initialize components
         writer = SmartWriter(api_key=config.AI_API_KEY)
         wp = WordPressClient(
             wp_url=config.WP_URL,
@@ -42,24 +41,35 @@ def run_bot():
         )
         
         topic = "Future of Artificial Intelligence 2026"
-        logger.info(f"Writing article: {topic}")
+        logger.info(f"Task: Writing about {topic}")
         
+        # Action
         article = writer.generate_article(topic)
-        body = article.get('body', "") if isinstance(article, dict) else article
         
+        # Body extraction logic
+        if isinstance(article, dict):
+            body = article.get('body', "")
+            title = article.get('title', topic)
+        else:
+            body = article
+            title = topic
+            
         if body:
-            post_id = wp.post_full_article(title=topic, content=body, status="draft")
-            logger.info(f"DONE! Article ID: {post_id}")
+            post_id = wp.post_full_article(title=title, content=body, status="draft")
+            logger.info(f"MISSION SUCCESS! Post ID: {post_id}")
+        else:
+            logger.error("AI returned empty content.")
+
     except Exception as e:
-        logger.error(f"Bot Error: {e}")
+        logger.error(f"Bot Error: {str(e)}")
 
 if __name__ == "__main__":
-    # 1. Start Server
+    # 1. Start Flask Server
     threading.Thread(target=run_health_server, daemon=True).start()
     
-    # 2. Run Automation
+    # 2. Run Bot
     run_bot()
     
-    # 3. Stay Alive
+    # 3. Keep process alive
     while True:
         time.sleep(3600)
