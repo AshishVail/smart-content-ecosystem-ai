@@ -5,14 +5,18 @@ import time
 import threading
 from flask import Flask
 
-# Path configuration
+# --- PATH FIX ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
-# Imports
-from utils import config
-from core_logic.writer_engine import SmartWriter
-from integrations.wordpress_api import WordPressClient
+# --- IMPORTS (Sahi tareeke se) ---
+try:
+    from utils import config
+    from core_logic.writer_engine import SmartWriter
+    from integrations.wordpress_api import WordPressClient
+except ImportError as e:
+    print(f"Crucial Import Error: {e}")
 
 # --- RENDER SERVER ---
 app = Flask(__name__)
@@ -30,13 +34,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s]: %(m
 logger = logging.getLogger("NexoventBot")
 
 def run_bot():
-    logger.info("Waiting 15s for server...")
-    time.sleep(15) 
+    logger.info("Bot logic starting in 20 seconds...")
+    time.sleep(20) 
     try:
-        # --- FIXED LINE BELOW ---
-        # Hum direct config se key pass kar rahe hain
-        writer = SmartWriter(api_key=config.AI_API_KEY) 
-        
+        # Check if config is loaded
+        if 'config' not in globals() and 'config' not in locals():
+            from utils import config
+
+        # Initialize
+        writer = SmartWriter(api_key=config.AI_API_KEY)
         wp = WordPressClient(
             wp_url=config.WP_URL,
             username=config.WP_USERNAME,
@@ -44,12 +50,10 @@ def run_bot():
         )
         
         topic = "Future of Artificial Intelligence 2026"
-        logger.info(f"Generating article for: {topic}")
+        logger.info(f"Working on topic: {topic}")
         
-        # AI se content mangwana
         article = writer.generate_article(topic)
         
-        # Article data check
         if isinstance(article, dict):
             body = article.get('body', "")
             title = article.get('title', topic)
@@ -58,21 +62,22 @@ def run_bot():
             title = topic
             
         if body:
-            logger.info("Content ready. Posting to WordPress...")
+            logger.info("Posting to WordPress...")
             post_id = wp.post_full_article(title=title, content=body, status="draft")
             if post_id:
-                logger.info(f"SUCCESS! Article Posted. ID: {post_id}")
+                logger.info(f"SUCCESS! Article ID: {post_id}")
         else:
             logger.error("AI returned empty content.")
 
     except Exception as e:
-        logger.error(f"Bot Error: {str(e)}")
+        logger.error(f"Bot Internal Error: {str(e)}")
 
 if __name__ == "__main__":
     # 1. Start Server
-    threading.Thread(target=run_health_server, daemon=True).start()
+    t = threading.Thread(target=run_health_server, daemon=True)
+    t.start()
     
-    # 2. Start Bot
+    # 2. Run Bot
     run_bot()
     
     # 3. Stay Alive
