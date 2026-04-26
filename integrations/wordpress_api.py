@@ -1,18 +1,8 @@
 """
 wordpress_api.py
 
-Secure, modular WordPress REST API integration for content and media publishing.
-
-Features:
- - Secure authentication with Application Passwords or JWT
- - Create/edit posts (title, content, markdown & HTML, categories, tags)
- - Upload images to WordPress Media Library and assign as featured
- - Support 'draft' or 'publish' status uploads
- - SEO meta integration (Yoast, RankMath)
- - Detailed error-handling and logging
- - OOP: WordPressClient class
-
-Requires: requests, logging
+Professional-grade WordPress REST API integration.
+Features: Secure Auth, Media Upload, SEO Meta (Yoast/RankMath), and Post Orchestration.
 """
 
 import base64
@@ -22,17 +12,20 @@ import os
 import requests
 from typing import List, Dict, Optional
 
-# =======================
-# Configure Logging
-# =======================
+# Markdown conversion logic (आर्टिकल को वर्डप्रेस फॉर्मेट में बदलने के लिए)
+try:
+    import markdown
+except ImportError:
+    markdown = None
+
+# Logging setup (प्रोफेशनल एरर ट्रैकिंग)
 logger = logging.getLogger("integrations.wordpress_api")
 if not logger.hasHandlers():
     logging.basicConfig(level=logging.INFO)
 
-
 class WordPressClient:
     """
-    Modular WordPress REST API interface for secure content and media publishing.
+    Advanced WordPress Client for automated content publishing.
     """
 
     def __init__(
@@ -43,294 +36,178 @@ class WordPressClient:
         jwt_token: Optional[str] = None
     ):
         """
-        Args:
-            wp_url (str): Base URL (e.g., https://example.com)
-            username (str): WordPress username
-            password (str): Application Password (if using basic auth)
-            jwt_token (str): Optional JWT string (if using JWT auth)
+        Initialization logic for WordPress connection.
         """
         self.wp_url = wp_url.rstrip("/")
         self.username = username
         self.password = password
         self.jwt_token = jwt_token
-        self.session = requests.Session()
-
+        self.api_url = f"{self.wp_url}/wp-json/wp/v2"
+        self.seo_api_url = f"{self.wp_url}/wp-json/yoast/v1" # Default to Yoast
+        
+        # Headers setup for authentication (सिक्योर ऑथेंटिकेशन सेटअप)
+        self.headers = {}
         if jwt_token:
-            self.session.headers.update({'Authorization': f'Bearer {jwt_token}'})
+            self.headers['Authorization'] = f'Bearer {jwt_token}'
         elif username and password:
             auth_string = f"{username}:{password}"
-            auth_b = base64.b64encode(auth_string.encode("utf-8"))
-            self.session.headers.update({'Authorization': f'Basic {auth_b.decode("utf-8")}'})
+            auth_b = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
+            self.headers['Authorization'] = f'Basic {auth_b}'
+        
+        logger.info(f"WordPressClient initialized for {self.wp_url}")
 
-        self.api_url = f"{self.wp_url}/wp-json/wp/v2"
-        self.seo_api_url = f"{self.wp_url}/wp-json/yoast/v1"  # or RankMath (adjust endpoint)
-        logger.info("WordPressClient initialized for %s", self.wp_url)
-
-    # -------------------------
-    # Authentication Utilities
-    # -------------------------
     def verify_connection(self) -> bool:
         """
-        Verify credentials and connectivity.
-        Returns: True if authorized and connected, else False.
+        Verify if the connection and credentials are valid.
+        (चेक करता है कि यूजर क्रेडेंशियल्स सही हैं या नहीं)
         """
         try:
-            resp = self.session.get(f"{self.api_url}/users/me", timeout=15)
+            resp = requests.get(f"{self.api_url}/users/me", headers=self.headers, timeout=15)
             resp.raise_for_status()
-            user = resp.json()
-            logger.info(f"Authenticated as WordPress user: {user.get('name', 'Unknown')}")
+            user_data = resp.json()
+            logger.info(f"Connected as: {user_data.get('name')}")
             return True
         except Exception as e:
-            logger.error(f"[WP] Authentication failed: {e}")
+            logger.error(f"Authentication failed: {e}")
             return False
-
-    # -------------------------
-    # Post Management
-    # -------------------------
-    def upload_post(
-        self,
-        title: str,
-        content: str,
-        categories: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
-        status: str = 'draft',
-        format: str = 'html',
-        featured_image_id: Optional[int] = None
-    ) -> Optional[int]:
-        """
-        Create a new post in WordPress.
-
-        Args:
-            title (str): Post Title
-            content (str): Content (HTML or Markdown)
-            categories (List[str]): List of category names (created if not exist)
-            tags (List[str]): List of tag names (created if not exist)
-            status (str): 'draft' or 'publish'
-            format (str): Content format, 'html' or 'markdown'
-            featured_image_id (int): Media library ID for featured image
-
-        Returns:
-            int: Post ID if successful, else None
-        """
-        try:
-            cats_ids = self._ensure_terms(categories or [], "categories")
-            tags_ids = self._ensure_terms(tags or [], "tags")
-            data = {
-                "title": title,
-                "content": content,
-                "status": status,
-                "categories": cats_ids,
-                "tags": tags_ids,
-                "format": "standard",  # or 'aside', etc.
-            }
-            if featured_image_id:
-                data["featured_media"] = featured_image_id
-
-            url = f"{self.api_url}/posts"
-            resp = self.session.post(url, json=data, timeout=30)
-            resp.raise_for_status()
-            post_id = resp.json()['id']
-            logger.info(f"[WP] Post created '{title}' (ID: {post_id}, Status: {status})")
-            return post_id
-        except Exception as e:
-            logger.error(f"[WP] Failed to upload post '{title}': {e} | Response: {getattr(e, 'response', None)}")
-            return None
 
     def _ensure_terms(self, names: List[str], term_type: str) -> List[int]:
         """
-        Ensure categories/tags exist and return their IDs. Creates them if necessary.
-
-        Args:
-            names (List[str]): names
-            term_type (str): 'categories' or 'tags'
-
-        Returns:
-            List[int]: IDs
+        Check if Category/Tag exists, if not, create it.
+        (कैटेगरी या टैग नहीं होने पर उन्हें अपने आप बना देता है)
         """
         ids = []
         for name in names:
-            # Try get by name
-            url = f"{self.api_url}/{term_type}?search={name}"
+            search_url = f"{self.api_url}/{term_type}?search={name}"
             try:
-                resp = self.session.get(url, timeout=10)
-                resp.raise_for_status()
+                resp = requests.get(search_url, headers=self.headers, timeout=10)
                 items = resp.json()
+                found = False
                 for item in items:
                     if item['name'].lower() == name.lower():
                         ids.append(item['id'])
+                        found = True
                         break
-                else:
-                    # Create term if not found
-                    create_url = f"{self.api_url}/{term_type}"
-                    create = self.session.post(create_url, json={"name": name}, timeout=15)
-                    create.raise_for_status()
-                    ids.append(create.json()['id'])
+                
+                if not found:
+                    create_resp = requests.post(
+                        f"{self.api_url}/{term_type}", 
+                        headers=self.headers, 
+                        json={"name": name}, 
+                        timeout=15
+                    )
+                    ids.append(create_resp.json()['id'])
             except Exception as e:
-                logger.error(f"[WP] Term fetch/create error for '{name}': {e}")
+                logger.error(f"Error ensuring term '{name}': {e}")
         return ids
 
-    # -------------------------
-    # Media Upload and Linking
-    # -------------------------
     def upload_media(self, img_path: str, alt_text: Optional[str] = None) -> Optional[int]:
         """
-        Upload an image to WordPress Media Library.
-
-        Args:
-            img_path (str): Local path to image
-            alt_text (str): ALT tag
-
-        Returns:
-            int: Media ID, or None if failed
+        Upload local image to WordPress Media Library.
+        (फोटो को वर्डप्रेस मीडिया लाइब्रेरी में अपलोड करता है)
         """
-        endpoint = f"{self.api_url}/media"
-        filename = os.path.basename(img_path)
-        headers = self.session.headers.copy()
-        headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        try:
-            with open(img_path, "rb") as img_file:
-                files = {"file": (filename, img_file, "image/webp")}
-                # WP expects POST multipart
-                resp = self.session.post(endpoint, files=files, headers=headers, timeout=40)
-                resp.raise_for_status()
-                media_id = resp.json().get("id")
-                logger.info(f"[WP] Uploaded image '{filename}', ID: {media_id}")
-                # Add ALT-text if provided
-                if alt_text:
-                    update_url = f"{endpoint}/{media_id}"
-                    self.session.post(update_url, json={"alt_text": alt_text})
-                return media_id
-        except Exception as e:
-            logger.error(f"[WP] Image upload failed for '{img_path}': {e}")
+        if not img_path or not os.path.exists(img_path):
+            logger.warning(f"Image path invalid: {img_path}")
             return None
 
-    # -------------------------
-    # SEO Meta Integration
-    # -------------------------
-    def update_seo_meta(
-        self, post_id: int, meta_title: str, meta_description: str, plugin: str = "yoast"
-    ) -> bool:
+        endpoint = f"{self.api_url}/media"
+        filename = os.path.basename(img_path)
+        
+        # Binary upload logic for high reliability
+        try:
+            with open(img_path, "rb") as img_file:
+                media_headers = self.headers.copy()
+                media_headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+                # Detecting content type (Assuming WebP from our Image Engine)
+                files = {'file': (filename, img_file, 'image/webp')}
+                
+                resp = requests.post(endpoint, files=files, headers=self.headers, timeout=45)
+                resp.raise_for_status()
+                media_id = resp.json().get("id")
+                
+                if alt_text and media_id:
+                    requests.post(f"{endpoint}/{media_id}", headers=self.headers, json={"alt_text": alt_text})
+                
+                logger.info(f"Media uploaded. ID: {media_id}")
+                return media_id
+        except Exception as e:
+            logger.error(f"Media upload failed: {e}")
+            return None
+
+    def update_seo_meta(self, post_id: int, title: str, description: str, plugin: str = "yoast") -> bool:
         """
-        Update SEO meta using Yoast or RankMath APIs.
-        Example for Yoast SEO, adjust for RankMath.
-
-        Args:
-            post_id (int): WordPress post ID
-            meta_title (str): Custom title
-            meta_description (str): Custom description
-            plugin (str): "yoast" or "rankmath"
-
-        Returns:
-            bool: Success
+        Update Yoast or RankMath Meta tags.
+        (योस्ट या रैंकमैथ एसईओ टैग्स को अपडेट करने के लिए)
         """
         try:
             if plugin == "yoast":
-                seo_url = f"{self.seo_api_url}/posts/{post_id}/meta"
-                payload = {"yoast_wpseo_title": meta_title, "yoast_wpseo_metadesc": meta_description}
+                payload = {"yoast_wpseo_title": title, "yoast_wpseo_metadesc": description}
+                resp = requests.post(f"{self.seo_api_url}/posts/{post_id}/meta", headers=self.headers, json=payload, timeout=20)
             elif plugin == "rankmath":
-                seo_url = f"{self.wp_url}/wp-json/rankmath/v1/updateMeta"
-                payload = {"id": post_id, "title": meta_title, "description": meta_description}
+                payload = {"id": post_id, "title": title, "description": description}
+                resp = requests.post(f"{self.wp_url}/wp-json/rankmath/v1/updateMeta", headers=self.headers, json=payload, timeout=20)
             else:
-                logger.error(f"[WP] Unknown SEO plugin: {plugin}")
                 return False
-
-            resp = self.session.post(seo_url, json=payload, timeout=20)
-            resp.raise_for_status()
-            logger.info(f"[WP] SEO meta updated ({plugin}) for post {post_id}")
-            return True
+            return resp.status_code == 200
         except Exception as e:
-            logger.error(f"[WP] Failed to update SEO meta for post {post_id}: {e}")
+            logger.error(f"SEO update failed: {e}")
             return False
 
-    # -------------------------
-    # High-level Orchestration
-    # -------------------------
     def post_full_article(
         self,
         title: str,
         content: str,
         image_path: Optional[str] = None,
-        alt_text: Optional[str] = None,
         categories: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
         status: str = 'draft',
         meta_title: Optional[str] = None,
         meta_description: Optional[str] = None,
-        format: str = 'html',
         seo_plugin: str = "yoast"
     ) -> Optional[int]:
         """
-        Complete process: Upload image, create post, link featured image, update SEO.
-
-        Returns:
-            int: Post ID or None
+        The main orchestrator to publish image + content + SEO.
+        (यह मुख्य फंक्शन है जो फोटो, लेख और एसईओ सब कुछ एक साथ पब्लिश करता है)
         """
-        featured_image_id = None
-        if image_path:
-            featured_image_id = self.upload_media(image_path, alt_text=alt_text)
-            if not featured_image_id:
-                logger.error(f"[WP] Media upload failed; aborting article post for '{title}'.")
-                return None
+        # 1. Process Content (Markdown to HTML conversion)
+        final_content = content
+        if markdown:
+            # Markdown को HTML में बदलना जरूरी है वरना WP फॉर्मेटिंग नहीं समझेगा
+            final_content = markdown.markdown(content, extensions=['extra', 'tables', 'fenced_code'])
 
-        post_id = self.upload_post(
-            title=title,
-            content=content,
-            categories=categories,
-            tags=tags,
-            status=status,
-            format=format,
-            featured_image_id=featured_image_id
-        )
-        if not post_id:
+        # 2. Upload Featured Image
+        featured_id = self.upload_media(image_path, alt_text=title) if image_path else None
+
+        # 3. Ensure Categories/Tags exist
+        cat_ids = self._ensure_terms(categories or [], "categories")
+        tag_ids = self._ensure_terms(tags or [], "tags")
+
+        # 4. Prepare Post Payload
+        payload = {
+            "title": title,
+            "content": final_content,
+            "status": status,
+            "categories": cat_ids,
+            "tags": tag_ids,
+            "format": "standard"
+        }
+        if featured_id:
+            payload["featured_media"] = featured_id
+
+        try:
+            post_url = f"{self.api_url}/posts"
+            resp = requests.post(post_url, headers=self.headers, json=payload, timeout=40)
+            resp.raise_for_status()
+            post_id = resp.json().get("id")
+            
+            # 5. Update SEO Meta if provided
+            if post_id and meta_title and meta_description:
+                self.update_seo_meta(post_id, meta_title, meta_description, plugin=seo_plugin)
+                
+            logger.info(f"Article '{title}' successfully published as {status}. ID: {post_id}")
+            return post_id
+        except Exception as e:
+            logger.error(f"Full article post failed: {e}")
             return None
 
-        if meta_title and meta_description:
-            self.update_seo_meta(post_id, meta_title, meta_description, plugin=seo_plugin)
-        return post_id
-
-# -------------------------
-# CLI Demo (Optional)
-# -------------------------
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="WordPress API Integration Demo")
-    parser.add_argument("--site", required=True, help="WordPress Site URL (https://example.com)")
-    parser.add_argument("--username", required=True)
-    parser.add_argument("--password", required=False)
-    parser.add_argument("--jwt", required=False)
-    parser.add_argument("--title", required=True)
-    parser.add_argument("--content", required=True)
-    parser.add_argument("--image", required=False)
-    parser.add_argument("--status", default="draft", choices=["publish", "draft"])
-    parser.add_argument("--meta_title", required=False)
-    parser.add_argument("--meta_desc", required=False)
-    parser.add_argument("--category", nargs="*", default=[])
-    parser.add_argument("--tag", nargs="*", default=[])
-    args = parser.parse_args()
-
-    client = WordPressClient(
-        wp_url=args.site,
-        username=args.username,
-        password=args.password,
-        jwt_token=args.jwt
-    )
-    if not client.verify_connection():
-        print("Failed to authenticate to WordPress API.")
-        exit(1)
-
-    post_id = client.post_full_article(
-        title=args.title,
-        content=args.content,
-        image_path=args.image,
-        alt_text=args.meta_title,
-        categories=args.category,
-        tags=args.tag,
-        status=args.status,
-        meta_title=args.meta_title,
-        meta_description=args.meta_desc
-    )
-    if post_id:
-        print(f"Article posted with ID: {post_id}")
-    else:
-        print("Failed to post article.")
+# End of Module
