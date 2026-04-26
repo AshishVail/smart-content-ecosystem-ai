@@ -8,7 +8,6 @@ from typing import List, Optional, Dict, Any
 
 # Modular components
 from utils import config
-# Import SmartWriter to match your writer_engine.py file
 from core_logic.writer_engine import SmartWriter
 from core_logic.seo_analyzer import SEOAnalyzer
 from media_manager.image_creator import SmartMediaEngine
@@ -36,7 +35,6 @@ logger = logging.getLogger("SmartEcosystem.Controller")
 
 class EcosystemController:
     def __init__(self):
-        # Use SmartWriter here
         self.writer = SmartWriter(api_key=config.AI_API_KEY)
         self.seo_analyzer = None
         self.media_engine = SmartMediaEngine({
@@ -59,33 +57,53 @@ class EcosystemController:
                 return
 
             logger.info("Step 1/4: Generating Content...")
-            article_body = self.writer.generate_article(primary_keyword)
+            article_data = self.writer.generate_article(primary_keyword)
+            
+            # Check if article_data is a dictionary or string
+            if isinstance(article_data, dict):
+                article_body = article_data.get('body', "")
+                article_title = article_data.get('title', primary_keyword.title())
+            else:
+                article_body = article_data
+                article_title = primary_keyword.title()
+
             if not article_body: 
-                logger.error("Content generation failed.")
+                logger.error("Content generation failed. Body is empty.")
                 return
 
             logger.info("Step 2/4: SEO Audit...")
-            self.seo_analyzer = SEOAnalyzer(
-                content=article_body,
-                primary_keyword=primary_keyword,
-                secondary_keywords=secondary_keywords
-            )
-            seo_report = self.seo_analyzer.analyze()
+            seo_report = {}
+            try:
+                self.seo_analyzer = SEOAnalyzer(
+                    content=article_body,
+                    primary_keyword=primary_keyword,
+                    secondary_keywords=secondary_keywords
+                )
+                seo_report = self.seo_analyzer.analyze() or {}
+            except Exception as e:
+                logger.warning(f"SEO Audit failed, but continuing: {e}")
             
             logger.info("Step 3/4: Creating Image...")
-            image_result = self.media_engine.generate_image_sync(primary_keyword)
-            image_path = image_result.get("path") if image_result.get("status") == "success" else None
+            image_path = None
+            try:
+                image_result = self.media_engine.generate_image_sync(primary_keyword)
+                if image_result and image_result.get("status") == "success":
+                    image_path = image_result.get("path")
+            except Exception as e:
+                logger.warning(f"Image creation failed: {e}")
 
             logger.info("Step 4/4: Posting to WordPress...")
+            meta_desc = seo_report.get('meta_description', f"Read about {primary_keyword}") if seo_report else f"Read about {primary_keyword}"
+            
             post_id = self.wp_client.post_full_article(
-                title=primary_keyword.title(),
+                title=article_title,
                 content=article_body,
                 image_path=image_path,
                 status="draft",
                 categories=[],
                 tags=[primary_keyword] + (secondary_keywords or []),
-                meta_title=primary_keyword.title(),
-                meta_description=seo_report.get('meta_description', ""),
+                meta_title=article_title,
+                meta_description=meta_desc,
                 seo_plugin=config.SEO_PLUGIN
             )
 
@@ -98,7 +116,6 @@ class EcosystemController:
             logger.critical(f"System Failure: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
-    # Start server in background thread for Render
     threading.Thread(target=run_health_server, daemon=True).start()
     
     controller = EcosystemController()
@@ -107,6 +124,5 @@ if __name__ == "__main__":
     
     controller.execute_workflow(main_keyword, secondary_keywords=related_keywords)
     
-    # Keep alive
     while True:
         time.sleep(3600)
