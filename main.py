@@ -21,8 +21,9 @@ def health_check():
     return "Ecosystem Controller is Active", 200
 
 def run_health_server():
+    # Force Render to see the port immediately
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 # ------------------------------
 
 # Logging Configuration
@@ -59,7 +60,6 @@ class EcosystemController:
             logger.info("Step 1/4: Generating Content...")
             article_data = self.writer.generate_article(primary_keyword)
             
-            # Check if article_data is a dictionary or string
             if isinstance(article_data, dict):
                 article_body = article_data.get('body', "")
                 article_title = article_data.get('title', primary_keyword.title())
@@ -68,7 +68,7 @@ class EcosystemController:
                 article_title = primary_keyword.title()
 
             if not article_body: 
-                logger.error("Content generation failed. Body is empty.")
+                logger.error("Content generation failed.")
                 return
 
             logger.info("Step 2/4: SEO Audit...")
@@ -81,7 +81,7 @@ class EcosystemController:
                 )
                 seo_report = self.seo_analyzer.analyze() or {}
             except Exception as e:
-                logger.warning(f"SEO Audit failed, but continuing: {e}")
+                logger.warning(f"SEO Audit failed: {e}")
             
             logger.info("Step 3/4: Creating Image...")
             image_path = None
@@ -93,7 +93,7 @@ class EcosystemController:
                 logger.warning(f"Image creation failed: {e}")
 
             logger.info("Step 4/4: Posting to WordPress...")
-            meta_desc = seo_report.get('meta_description', f"Read about {primary_keyword}") if seo_report else f"Read about {primary_keyword}"
+            meta_desc = seo_report.get('meta_description', f"New update on {primary_keyword}")
             
             post_id = self.wp_client.post_full_article(
                 title=article_title,
@@ -110,19 +110,23 @@ class EcosystemController:
             if post_id:
                 logger.info(f"SUCCESS: Article posted with ID {post_id}")
             
-            logger.info(f"Workflow completed in {time.time() - start_time:.2f} seconds.")
-
         except Exception as e:
             logger.critical(f"System Failure: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
+    # 1. Start Flask server FIRST in a thread
     threading.Thread(target=run_health_server, daemon=True).start()
     
+    # 2. Give the server a moment to bind to the port
+    time.sleep(5)
+    
+    # 3. Now run your bot logic
     controller = EcosystemController()
     main_keyword = "Future of Artificial Intelligence 2026"
     related_keywords = ["AI trends", "Automation"]
     
     controller.execute_workflow(main_keyword, secondary_keywords=related_keywords)
     
+    # Keep the process alive for Render
     while True:
         time.sleep(3600)
