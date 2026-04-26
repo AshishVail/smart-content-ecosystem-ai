@@ -1,12 +1,4 @@
-groq>=0.4.2
-python-dotenv>=1.0.1
-requests>=2.31.0
-flask>=3.0.0
-gunicorn>=21.2.0
-markdown>=3.6
-beautifulsoup4>=4.12.3
-lxml>=5.2.0
-Pillow>=10.2.0
-backoff>=2.2.1
-json5>=0.9.14
-google-generativeai
+groq
+python-dotenv
+requests
+flask
