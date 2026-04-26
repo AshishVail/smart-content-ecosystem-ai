@@ -1,18 +1,16 @@
-# --- Core AI & API Clients ---
-groq>=0.4.2
+--- Core AI & API Clients ---
+​groq>=0.4.2
 python-dotenv>=1.0.1
-
-# --- Web Server (Required for Render Deployment) ---
-flask>=3.0.0
-gunicorn>=21.2.0
-
-# --- SEO & Text Analysis ---
-beautifulsoup4>=4.12.3
 requests>=2.31.0
-
-# --- Image Processing (Optional for now) ---
-Pillow>=10.2.0
-
-# --- Utilities ---
-pathlib>=1.0.1
-json5>=0.9.14
+​--- Web Server (Required for Render/Cloud Deployment) ---
+​flask>=3.0.0
+gunicorn>=21.2.0
+​--- Content & SEO Processing ---
+​markdown>=3.6          # Important: Converts AI text to HTML for WordPress
+beautifulsoup4>=4.12.3 # Used for cleaning and analyzing text
+lxml>=5.2.0            # Faster parsing for BeautifulSoup
+​--- Image Processing ---
+​Pillow>=10.2.0         # For handling images and WebP conversion
+​--- Utilities & Reliability ---
+​backoff>=2.2.1         # Smart retries for API stability
+json5>=0.9.14          # Enhanced JSON handling
