@@ -1,4 +1,4 @@
-groq
+Groq
 python-dotenv
 requests
 flask
