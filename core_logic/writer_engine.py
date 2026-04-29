@@ -1,4 +1,3 @@
-```python name=writer_engine.py
 import os
 import logging
 import json
