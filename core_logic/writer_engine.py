@@ -144,4 +144,3 @@ if __name__ == "__main__":
     result = writer.generate_article(topic=topic, keyword=keyword)
     print("\n=== TITLE ===\n", result["title"])
     print("\n=== HTML BODY ===\n", result["body"])
-```
