@@ -43,7 +43,7 @@ def run_bot():
             from wordpress_api import WordPressClient
 
         # Components initialization
-        writer = SmartWriter(api_key=config.AI_API_KEY)
+        writer = SmartWriter(api_key=config.GROQ_API_KEY)
         wp = WordPressClient(
             wp_url=config.WP_URL, 
             username=config.WP_USERNAME, 
