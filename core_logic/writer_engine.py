@@ -2,7 +2,7 @@ import os
 import requests
 
 class SmartWriter:
-    def __init__(self, GROQ_API_KEY=None):
+    def __init__(self, GROQ_API_KEY=None, **kwargs):
         # 1. Sabse pehle check karega ki main.py se key aayi hai ya nahi
         # 2. Agar nahi aayi, toh seedhe Render ke Environment se uthayega
         self.api_key = GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
