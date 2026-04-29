@@ -4,7 +4,7 @@ import os
 WP_URL = os.getenv("WP_URL", "https://earnguide.in")
 WP_USERNAME = os.getenv("WP_USERNAME")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
-AI_API_KEY = os.getenv("AI_API_KEY")
+AI_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Public settings
 BRAND_NAME = "Nexovent"
