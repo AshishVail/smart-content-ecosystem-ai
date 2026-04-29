@@ -2,25 +2,28 @@ import os
 import requests
 
 class SmartWriter:
-    def __init__(self, api_key):
-        # API Key seedhe main.py se yahan aayegi
-        self.api_key = api_key
+    def __init__(self, api_key=None):
+        # Fallback to environment variable if api_key is not provided
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
 
     def generate_article(self, topic):
-        if not self.api_key:
-            return "Error: API Key missing"
+        # Double check the key before making the request
+        active_key = self.api_key or os.environ.get("GROQ_API_KEY")
+        
+        if not active_key:
+            return {"title": topic, "body": "Critical Error: GROQ_API_KEY is missing", "status": "error"}
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {active_key}",
             "Content-Type": "application/json"
         }
 
         data = {
             "model": "llama-3.3-70b-versatile",
             "messages": [
-                {"role": "system", "content": "You are a professional SEO content writer."},
-                {"role": "user", "content": f"Write a high-quality blog post about: {topic}. Use HTML tags like <h2> and <p>."}
+                {"role": "system", "content": "You are a professional SEO content writer. Provide output in HTML format only."},
+                {"role": "user", "content": f"Write a high-quality blog post about: {topic}. Use <h2> and <p> tags."}
             ]
         }
 
@@ -30,7 +33,6 @@ class SmartWriter:
             result = response.json()
             content = result['choices'][0]['message']['content']
             
-            # Simple title/body separation
-            return {"title": topic, "body": content}
+            return {"title": topic, "body": content, "status": "success"}
         except Exception as e:
-            return {"error": str(e), "body": ""}
+            return {"title": topic, "body": str(e), "status": "failed"}
