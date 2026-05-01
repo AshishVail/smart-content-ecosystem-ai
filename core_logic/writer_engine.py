@@ -327,4 +327,4 @@ if __name__ == "__main__":
     writer = MasterWriterEngine()
     result = writer.generate_article(topic=topic, keyword=keyword)
     print("\n=== TITLE ===\n" + result["title"])
-    print("\n=== HTML BODY ===\n" + result["body"]
+    print("\n=== HTML BODY ===\n" + result["body"])
