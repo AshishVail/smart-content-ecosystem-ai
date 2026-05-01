@@ -1,146 +1,139 @@
 import os
-import logging
-import json
 import re
+import logging
 from typing import Optional, Dict
 from groq import Groq, RateLimitError
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("core_logic.writer_engine")
 
 class SmartWriter:
     """
-    SmartWriter generates elite-level SEO HTML blog articles using the Groq Llama 3.3 70B model.
-    Ensures:
-    - Proper heading hierarchy and semantic HTML.
-    - Focus keyword SEO injection.
-    - FAQ section and strict mobile-first paragraph length.
-    - No markdown or tables, pure HTML only.
+    SmartWriter generates high-authority, 2000+ word SEO articles as pure, semantic HTML using Groq's Llama 3.3 70B.
+    - Handles key via init or os.environ["GROQ_API_KEY"], absorbs extra kwargs.
+    - AI produces: <h1>, 8-10+ <h2>, nested <h3>/<h4>; {keyword} 15-20 times in <strong>;
+      expert <ul>/<li>, comparative HTML <table> (if relevant),
+      intro/key takeaways, body, 6+ advanced FAQ <h4>, mobile-first <p>.
+    - Output is dict {title, body, status} with all markdown and fences stripped.
     """
 
     DEFAULT_MODEL = "llama-3.3-70b-versatile"
-    DEFAULT_TIMEOUT = 120  # seconds
-    FOCUS_MIN = 10
-    FOCUS_MAX = 15
+    TIMEOUT = 180  # seconds for 2000+ words
 
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         """
-        Initialize SmartWriter with Groq API key.
-
         Args:
-            api_key (str, optional): Groq API Key. If not provided, load from env.
-            **kwargs: Absorbs unexpected args for robustness.
+            api_key (str, optional): Groq API key. If not provided, uses GROQ_API_KEY env var.
+            **kwargs: For argument mismatch tolerance.
         """
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         if not self.api_key:
-            raise EnvironmentError("Groq API key not set. Use api_key or set GROQ_API_KEY.")
+            raise EnvironmentError("GROQ_API_KEY not set and api_key not passed.")
         self.client = Groq(api_key=self.api_key)
         self.model = self.DEFAULT_MODEL
 
-    def generate_article(self, topic: str, keyword: str, word_count: int = 1200, **kwargs) -> Dict[str, str]:
+    def generate_article(self, topic: str, keyword: str, **kwargs) -> Dict[str, str]:
         """
-        Generate a fully HTML-formatted SEO blog post.
+        Generates a 2000+ word, HTML, SEO-perfect long-form article.
 
         Args:
-            topic (str): The main topic/title (used in <h1>)
-            keyword (str): The SEO focus keyword.
-            word_count (int): Target word count (default 1200)
-
+            topic (str): Article topic/title (in <h1>)
+            keyword (str): Focus keyword, used 15-20 times in <strong>
         Returns:
-            dict: {"title": topic, "body": html_content, "status": "success" or "error"}
+            dict: {title, body, status}
         """
-        # Build AI system and user prompts
-        system_prompt = self._build_system_prompt()
-        user_prompt = self._build_user_prompt(topic, keyword, word_count)
-
+        prompt = self._build_system_prompt(topic, keyword)
+        user_message = self._build_user_message(topic, keyword)
         try:
-            logger.info("Requesting article from Groq Llama 3.3 70B...")
+            logger.info("Requesting Groq Llama 3.3 70B article...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": user_message}
                 ],
-                temperature=0.6,
+                temperature=0.4,
                 max_tokens=4096,
-                timeout=self.DEFAULT_TIMEOUT
+                timeout=self.TIMEOUT
             )
+            # Expect all HTML in response
             raw = response.choices[0].message.content.strip()
             html = self._clean_html(raw)
             title = self._extract_title(html, fallback=topic)
-            logger.info("Article generated successfully.")
+            logger.info("Article generated and cleaned successfully.")
             return {"title": title, "body": html, "status": "success"}
         except RateLimitError as e:
             logger.error("Groq rate limit exceeded: %s", e)
             return {"title": topic, "body": "", "status": "error"}
         except Exception as e:
-            logger.error("Groq API/Parsing error: %s", e)
+            logger.error("Error in Groq/parse: %s", e)
             return {"title": topic, "body": "", "status": "error"}
 
-    def _build_system_prompt(self) -> str:
+    def _build_system_prompt(self, topic: str, keyword: str) -> str:
         """
-        Build the system prompt for Groq API, enforcing HTML/SEO guidelines.
+        Create the detailed system prompt for the LLM.
         """
         return (
-            "You are an expert SEO blog writer and strictly output PURE HTML code only. "
-            "For every article:\n"
-            "- Use exactly one <h1> at the top for the article title.\n"
-            "- Organize with more than 6 <h2> and several <h3> subsections; use a deep heading hierarchy.\n"
-            "- Integrate the focus keyword NATURALLY 10-15 times (not repetitive, well-distributed), always wrapped in <strong> tags.\n"
-            "- Only use <ul> and <li> elements for bullet/numbered lists; strictly forbid <table>, Markdown, or any non-HTML markup.\n"
-            "- Use short, mobile-first paragraphs (2-3 sentences per <p> at most) for readability.\n"
-            "- End with a comprehensive FAQ using several <h4> questions with clear answers below each.\n"
-            "- Absolutely NO Markdown wrappers, YAML blocks or code fences in your output – only valid HTML.\n"
-            "Never use any <!-- --> comments."
+            f"You are 'SmartWriter', the world's top-tier SEO+HTML blog generator. "
+            "Write an article about the given topic using these STRICT RULES:\n"
+            "1. Output PURE HTML (absolutely no markdown, yaml, or codeblocks).\n"
+            "2. Exactly one <h1> at the top for the title.\n"
+            "3. Organize the article into at least ten sections:\n"
+            "  - Use at least 8-10 <h2> tags for section headings.\n"
+            "  - For nested topics within a section, use <h3> and <h4> as needed.\n"
+            "4. Integrate the focus keyword '{keyword}' naturally 15-20 times, always in <strong> tags, well-spaced, never stuffed.\n"
+            "5. Introduction: Engaging hook (<p>), immediately followed by a <div class='key-takeaways'><h2>Key Takeaways</h2><ul>...</ul></div> box.\n"
+            "6. For any lists, always use <ul> and <li> (never <ol> or markdown lists).\n"
+            "7. If the data is comparative (vs, benefits vs drawbacks, etc), use a valid, semantic HTML <table> with <thead>, <tr>, <th>, <td>.\n"
+            "8. Mobile-first readability: No <p> should have more than 2 sentences; frequently break into extra <p> for visual white space. If a rule or list is repeated, use <br> for further breaks.\n"
+            "9. Advanced FAQ: At least 6 deep expert questions in <h4>, each with a thorough answer below.\n"
+            "10. Conclude with a full summary section and a strong call-to-action (<h2>Conclusion</h2>)."
+            "11. DO NOT USE markdown symbols, YAML, *** or --- or ```html anywhere. "
+            "12. Output only pure HTML, no comments, no instructions, no explanations. "
+            "13. Any keyword synonym/variant should also appear in a <strong> tag for SEO boost."
         )
 
-    def _build_user_prompt(self, topic: str, keyword: str, word_count: int) -> str:
+    def _build_user_message(self, topic: str, keyword: str) -> str:
         """
-        Build the user prompt, providing all must-have logic for HTML and SEO.
+        Provides concrete user instruction for LLM for the topic and keyword context.
         """
         return (
-            f"Write a detailed, production-grade blog post in PURE HTML."
-            f"\nTitle/Topic: {topic}\n"
-            f"SEO Focus Keyword: {keyword}."
-            f"\nTarget Word Count: {word_count}.\n"
-            f"Article Requirements:\n"
-            "- <h1> for the title.\n"
-            "- Use at least 6 <h2> and several <h3> as a nested hierarchy.\n"
-            "- Include the keyword {keyword} 10 to 15 times, each occurrence wrapped in <strong> tags for SEO (but never repetitive).\n"
-            "- Keep each <p> to 2-3 sentences maximum for mobile readability.\n"
-            "- End with a comprehensive <h2>FAQ</h2> section, using <h4> for each FAQ question and a clear answer after each.\n"
-            "- Use only <ul> and <li> for all lists; never use <table> or markdown symbols.\n"
-            "Strip all code fences or non-HTML wrappers from your response before sending."
+            f"Write an elite-quality, human-like, SEO-optimized article about '{topic}', "
+            f"targeting the focus keyword '{keyword}'. "
+            "The article MUST be at least 2000 words, very detailed, with all sections and requirements above."
         )
 
     def _clean_html(self, text: str) -> str:
         """
-        Strip any markdown/code fences or non-HTML wrappers.
-        Removes leading/trailing code blocks, ```html or ``` marks, and unwanted YAML/markdown.
+        Strip all markdown/triple-backtick blocks, YAML, or any AI preamble. Return pure HTML.
         """
-        cleaned = re.sub(r'^(```\w*|---|yaml:|html:)+', '', text, flags=re.IGNORECASE | re.MULTILINE)
-        cleaned = re.sub(r'(```)+$', '', cleaned, flags=re.MULTILINE)
-        cleaned = cleaned.strip()
-        # Remove any lingering code fences anywhere in the text
-        cleaned = re.sub(r'```[\s\S]*?```', '', cleaned)
+        # Remove code fences and any trailing markdown
+        cleaned = re.sub(r"^(```[a-zA-Z0-9]*\s*)+", "", text, flags=re.MULTILINE)
+        cleaned = re.sub(r"(```)+$", "", cleaned, flags=re.MULTILINE)
+        cleaned = cleaned.strip(" \n")
+        # Remove standalone Markdown headings or lines starting with * or --- etc
+        cleaned = re.sub(r"\n\*+\s*\n", "\n", cleaned)
+        cleaned = re.sub(r"\n-{3,}\n", "\n", cleaned)
+        # Remove yaml front-matter if present
+        cleaned = re.sub(r"^---\s*[\s\S]{0,200}?---\s*", "", cleaned, flags=re.MULTILINE)
+        # Remove lines like 'Here is the article:', 'Below is the HTML:', etc.
+        cleaned = re.sub(r"^.*?(<h1[\s>])", r"\1", cleaned, flags=re.DOTALL | re.IGNORECASE)
         return cleaned
 
     def _extract_title(self, html: str, fallback: str) -> str:
         """
-        Extract the <h1> title from the HTML. If not found, uses fallback topic.
+        Extract <h1> from HTML, else fallback to topic.
         """
-        match = re.search(r'<h1[^>]*>(.*?)</h1>', html, flags=re.IGNORECASE | re.DOTALL)
+        match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.IGNORECASE | re.DOTALL)
         if match:
             title = match.group(1).strip()
-            title = re.sub(r'<.*?>', '', title)
+            title = re.sub(r"<.*?>", "", title)
             return title
         return fallback
 
 if __name__ == "__main__":
-    topic = input("Enter the article topic: ").strip()
-    keyword = input("Enter the focus keyword: ").strip()
+    topic = input("Enter article topic: ").strip()
+    keyword = input("Enter SEO focus keyword: ").strip()
     writer = SmartWriter()
     result = writer.generate_article(topic=topic, keyword=keyword)
-    print("\n=== TITLE ===\n", result["title"])
-    print("\n=== HTML BODY ===\n", result["body"])
+    print("\n=== TITLE ===\n", result
