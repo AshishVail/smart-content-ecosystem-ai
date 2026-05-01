@@ -11,7 +11,7 @@ logger = logging.getLogger("core_logic.writer_engine")
 
 class Config:
     """
-    Manages advanced SEO and Content generation rules for MasterWriterEngine.
+    Manages advanced SEO and Content generation rules for SmartWriter.
     """
     def __init__(
         self,
@@ -50,7 +50,7 @@ def retry_on_fail(max_retries=3, exceptions=(RateLimitError, Exception), delay=5
     return decorator
 
 
-class MasterWriterEngine:
+class SmartWriter:
     """
     Production-grade 2500+ word SEO, human-footprint, HTML content generator.
     All formatting, AI footprints, and LLM artifacts are aggressively cleaned
@@ -65,7 +65,7 @@ class MasterWriterEngine:
         """
         Full client initialization and config management.
         """
-        logger.info("Initializing MasterWriterEngine.")
+        logger.info("Initializing SmartWriter.")
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         if not self.api_key:
             logger.critical("No GROQ_API_KEY provided or found in environment.")
@@ -324,7 +324,7 @@ class MasterWriterEngine:
 if __name__ == "__main__":
     topic = input("Enter article topic: ").strip()
     keyword = input("Enter SEO focus keyword: ").strip()
-    writer = MasterWriterEngine()
+    writer = SmartWriter()
     result = writer.generate_article(topic=topic, keyword=keyword)
     print("\n=== TITLE ===\n" + result["title"])
     print("\n=== HTML BODY ===\n" + result["body"])
