@@ -136,4 +136,4 @@ if __name__ == "__main__":
     keyword = input("Enter SEO focus keyword: ").strip()
     writer = SmartWriter()
     result = writer.generate_article(topic=topic, keyword=keyword)
-    print("\n=== TITLE ===\n", result
+        print("\n=== TITLE ===\n", result)
