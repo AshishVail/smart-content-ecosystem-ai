@@ -130,10 +130,10 @@ class SmartWriter:
             title = re.sub(r"<.*?>", "", title)
             return title
         return fallback
-
+        
 if __name__ == "__main__":
     topic = input("Enter article topic: ").strip()
     keyword = input("Enter SEO focus keyword: ").strip()
     writer = SmartWriter()
     result = writer.generate_article(topic=topic, keyword=keyword)
-        print("\n=== TITLE ===\n", result)
+    print("\n=== TITLE ===\n", result)
