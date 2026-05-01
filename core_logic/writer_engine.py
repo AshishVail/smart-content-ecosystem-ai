@@ -9,44 +9,42 @@ logger = logging.getLogger("core_logic.writer_engine")
 
 class SmartWriter:
     """
-    SmartWriter: Generates long, human-like, SEO-dominating HTML articles using Groq Llama 3.3 70B.
-    - Every heading tags (<h1>-<h4>) content bolded (<strong>)
-    - Focus keyword always bolded using <strong>
+    SmartWriter generates 2500+ word, first-person, high-authority HTML articles
+    that pass AI detection and dominate Google rankings.
+    - First-person, conversational, narrative flow with varied sentence length and hooks
+    - Analytical analogies, scenarios, and rhetorical questions
+    - AGGRESSIVE FORMATTING: <h1>-<h4> headings bolded; focus keyword bolded only 4-5 times
+    - Catchy, real-world, non-boring headings
+    - Clean HTML: complex <table>, <ul>/<li> lists, <br> for white space, 2-3 sentences per <p>
+    - Internal link placeholders (twice)
     - Conclusion section fully bolded
-    - Conversational, story-driven journalist tone with perplexity
-    - Never use boring headings; always rephrase, always catchy
-    - At least one in-depth comparison <table>
-    - No Key Takeaways/summary box, no AI trash or markdown
-    - At least 2500 words with 15+ deep subheadings (<h2>-<h4>)
-    - Internal link placeholder: "For more insights, check out our guide on [Internal Link Here]."
-    - __init__ with **kwargs for API/CLI stability
-    - timeout=300 for long completions
-    - Clean-up removes all markdown, code fences, and AI noise
+    - Key Takeaways forbidden
+    - Markdown/code/preamble cleaning
     """
 
     DEFAULT_MODEL = "llama-3.3-70b-versatile"
-    TIMEOUT = 300  # up to 5 minutes for long, complex responses
+    TIMEOUT = 300  # seconds
 
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         if not self.api_key:
-            raise EnvironmentError("GROQ_API_KEY env variable must be set or passed to SmartWriter.")
+            raise EnvironmentError("Must provide GROQ_API_KEY in env or as argument.")
         self.client = Groq(api_key=self.api_key)
         self.model = self.DEFAULT_MODEL
 
     def generate_article(self, topic: str, keyword: str, **kwargs) -> Dict[str, str]:
-        prompt = self._build_system_prompt(topic, keyword)
+        system_prompt = self._build_system_prompt(topic, keyword)
         user_message = self._build_user_message(topic, keyword)
         try:
-            logger.info("Requesting Groq Llama 3.3 70B for SEO HTML generation...")
+            logger.info("Requesting 2500+ word, SEO-optimized article from Groq...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": prompt},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
                 ],
-                temperature=0.4,
-                max_tokens=4096,
+                temperature=0.6,
+                max_tokens=4000,
                 timeout=self.TIMEOUT
             )
             raw = response.choices[0].message.content.strip()
@@ -62,54 +60,38 @@ class SmartWriter:
             return {"title": topic, "body": "", "status": "error"}
 
     def _build_system_prompt(self, topic: str, keyword: str) -> str:
-        """
-        Returns the most advanced, human-like SEO and HTML instruction set
-        for Llama 3.3 70B under the 'bold everything' and anti-AI-detection mandate.
-        """
         return (
-            f"INSTRUCTIONS (Strict; follow precisely):\n\n"
-            f"1. OUTPUT: Only pure, production-ready HTML (never markdown, never a code block, never YAML, never wrap in ``` or similar).\n"
-            f"2. 'BOLD EVERYTHING' RULE:\n"
-            f" - Every <h1>, <h2>, <h3>, <h4> content MUST be wrapped with <strong> tags. "
-            f"   e.g. <h2><strong>This is a bold heading</strong></h2>.\n"
-            f" - EVERY time the focus keyword '{keyword}' or any direct synonym appears in the article body, wrap it in <strong> tags. NEVER miss one.\n"
-            f"3. STRUCTURE:\n"
-            f" - Begin IMMEDIATELY with <h1><strong>{topic}</strong></h1> (no intro text before the h1).\n"
-            f" - Create a 2500+ word body organized into at least 15 clever, deep, siloed sections "
-            f"(<h2>, <h3>, <h4> as needed; always catchy, journalistic-style section titles, NO boring/generic headings, rephrase everything catchy and human).\n"
-            f" - Every heading at any level must have inner contents wrapped in <strong> as above.\n"
-            f" - NO 'Key Takeaways', no introductory summary box, no summary at start.\n"
-            f"4. BODY CONTENT:\n"
-            f" - Start with a true 'hook': a shocking stat, bold claim, or rhetorical question (never use 'In this article...'). "
-            f"Use first-person, storytelling style; mix rhetorical hooks and commentary.\n"
-            f" - Vary sentence lengths for human 'perplexity' and 'burstiness' (short, punchy lines then deeper dives; "
-            f"use rhetorical questions and asides liberally; imagine a top journalist is writing for WIRED or TechCrunch).\n"
-            f" - Feature lists must use semantic <ul> and <li>. Comparative information must use a well-structured HTML <table> with <thead>, <tr>, <th>, <td>—be creative, realistic, and detailed. If a table ever feels relevant, include it.\n"
-            f" - At least 15-20 natural {keyword} (and close synonym) mentions, ALL bolded (<strong>).\n"
-            f" - Insert, at a natural place, this sentence for internal linking: 'For more insights, check out our guide on [Internal Link Here].'\n"
-            f"5. CONCLUSION:\n"
-            f" - End with a clear heading: <h2><strong>Conclusion</strong></h2>.\n"
-            f" - The ENTIRE conclusion section body text—everything from <h2>Conclusion</h2> to the closing—must be fully wrapped in <strong> tags. The text itself must be direct and have a strong call-to-action or final insight, never formulaic.\n"
-            f"6. FAQ:\n"
-            f" - After the conclusion, write an 'Advanced FAQ' section with at least 6 bolded <h4> questions and substantial, expert answers after each.\n"
-            f"7. OUTPUT QUALITY:\n"
-            f" - NEVER output markdown, triple backticks, yaml blocks, html comments, or any AI-styled preamble text. Only pure, semantically valid HTML, clean lines—ready for publishing as-is. No explanations, just the content.\n"
+            f"You are SmartWriter, a senior SEO content strategist and tech blogger."
+            f"\nINSTRUCTIONS (Follow exactly, be creative, 100% HTML):"
+            f"\n1. Use only pure HTML output. No markdown, no yaml, no code fences, no explanations."
+            f"\n2. Start immediately with an <h1>—the article title—with all inner text in <strong> tags: <h1><strong>Title Here</strong></h1>."
+            f"\n3. All <h2>, <h3>, and <h4> headings must also wrap ALL their content in <strong> tags (e.g. <h3><strong>Why This Changes Everything</strong></h3>)."
+            f"\n4. Absolutely NEVER include a Key Takeaways box, summary panels, or anything of the sort. Go straight into the narrative."
+            f"\n5. Write in 1st person, conversational style (use I, We, Our). Use contractions for authenticity."
+            f"\n6. Every section and heading must be catchy and benefit-driven. Boring headings are forbidden."
+            f"\n   Example: Instead of 'Artificial Intelligence in Healthcare', write 'Saving Lives: The Unexpected Way Algorithms are Redefining Surgery.'"
+            f"\n7. Use analogies (e.g., compare AI to the invention of electricity), hypothetical scenarios, and rhetorical questions."
+            f"\n8. For perplexity and burstiness, alternate between short, punchy sentences and long, detailed ones—never monotone."
+            f"\n9. Use a minimum of 15 section headers (<h2> to <h4>), building a deep silo around the topic."
+            f"\n10. Bold the keyword '{keyword}' with <strong> tags, but only where most impactful—strictly 4 to 5 times in the entire article. Use plain text for all other mentions."
+            f"\n11. The entire conclusion section, starting with <h2><strong>Conclusion</strong></h2>, must be bolded (wrap all conclusion body text in <strong>)."
+            f"\n12. No <p> should be longer than 2-3 sentences (use <br> for more white space if sections start looking dense)."
+            f"\n13. For any lists, always use <ul> and <li>. For comparisons (e.g., pros/cons or alternatives or technology features), use a fully semantic HTML <table> with headers."
+            f"\n14. Somewhere near the 1/3 mark and again near the end, include this paragraph exactly (adjust for topic):"
+            f"\n   <p><em>Check out our deep dive into [Internal Link Placeholder] for more details.</em></p>"
+            f"\n15. After conclusion, add an 'Advanced FAQ' with at least 6 <h4><strong>...</strong></h4> expert questions and substantial answers."
+            f"\n16. Only output clean, semantic HTML. No markdown symbols (***, ###, **, -), no code fences (```html), no 'Sure, here is', no AI filler, no comments, no explanations."
+            f"\n17. Target at least 2500 words. If it's too short, keep expanding."
         )
 
     def _build_user_message(self, topic: str, keyword: str) -> str:
-        """
-        Yields the user message with explicit topic and keyword context.
-        """
         return (
-            f"Write a long, highly persuasive, narrative-style HTML article titled '{topic}' focused on the keyword '{keyword}'. "
-            f"Make sure every subheading is catchy and bolded, every use of {keyword} is wrapped in <strong>, and the article fulfills all instructions above."
+            f"Write a very long, SEO-optimized, human-sounding HTML article titled '{topic}'."
+            f" Focus on the keyword '{keyword}' as instructed. Follow all above rules exactly. Use only HTML, never markdown, yaml, or any code fence."
         )
 
     def _clean_html(self, text: str) -> str:
-        """
-        Removes ALL markdown, code fences, comments, AI-generated trash (e.g. "Type / to choose a block"), or HTML explanations.
-        Leaves only pure HTML.
-        """
+        # Remove all code fences, markdown, comments, and AI filler/preambles
         cleaned = re.sub(r"^(```[a-zA-Z0-9\-]*\s*)+", "", text, flags=re.MULTILINE)
         cleaned = re.sub(r"(```)+$", "", cleaned, flags=re.MULTILINE)
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.DOTALL)
@@ -117,8 +99,7 @@ class SmartWriter:
         cleaned = re.sub(r"\*\*\*.*\*\*\*", "", cleaned, flags=re.MULTILINE)
         cleaned = re.sub(r"^#+\s.*$", "", cleaned, flags=re.MULTILINE)
         cleaned = re.sub(r"Type\s*/\s*to\s*choose\s*a\s*block.*(\n|$)", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"Here is( the)? (article|HTML code|a detailed answer):?\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"^.+?(<h1>)", r"\1", cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r"(Here is|Sure,|Below is|Output:|Answer:|Take a look at the following|Let's get started).*?(<h1>)", r"\2", cleaned, flags=re.DOTALL | re.IGNORECASE)
         cleaned = cleaned.strip(" \n\r\t")
         return cleaned
 
